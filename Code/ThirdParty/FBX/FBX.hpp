@@ -17,7 +17,10 @@ bool FbxLoadMotion(Motion *motion, Skeleton const *skeleton, char const *filenam
 
 #else
 
+// #define __PLACEMENT_NEW_INLINE
 #include <fbxsdk.h>
+// #pragma comment(lib, "libfbxsdk-md.lib")
+
 #include "Engine/Math/MatrixStack.hpp"
 #include "Engine/Math/UIntVector4.hpp"
 

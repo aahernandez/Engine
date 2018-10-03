@@ -25,11 +25,11 @@ extern int gB;
 #define KB * 1024;
 #define kB * 1000;
 #define MB * 1024 * KB;
-#define mB * 1000 * kB;
+// #define mB * 1000 * kB;
 
 void pause();
-std::string GetPrettierTime(float timeInSeconds);
-std::string GetPrettierSize(unsigned int sizeInBytes);
+std::string GetTimeAsString(float timeInSeconds);
+std::string GetByteSizeAsString(unsigned int sizeInBytes);
 
 class DeveloperConsole;
 extern DeveloperConsole *g_theDevConsole;

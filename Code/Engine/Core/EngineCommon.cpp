@@ -2,7 +2,7 @@
 #include "Engine/Core/DeveloperConsole.hpp"
 #include "Engine/Core/StringUtils.hpp"
 
-std::string GetPrettierTime(float timeInSeconds)
+std::string GetTimeAsString(float timeInSeconds)
 {
 	float newTime = timeInSeconds * ms;
 	if (newTime < 1.f)
@@ -13,7 +13,7 @@ std::string GetPrettierTime(float timeInSeconds)
 		return Stringf("%.2fs", timeInSeconds);
 }
 
-std::string GetPrettierSize(unsigned int sizeInBytes)
+std::string GetByteSizeAsString(unsigned int sizeInBytes)
 {
 	float newSize = sizeInBytes / KiB;
 	if (newSize < 2.f)

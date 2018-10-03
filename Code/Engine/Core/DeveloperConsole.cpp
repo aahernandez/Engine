@@ -288,8 +288,8 @@ void DeveloperConsole::RenderMemoryProfiler()
 	g_theSimpleRenderer->DrawText2D("PROFILER", Vector2(20.f, 700.f), RGBA::WHITE, 1.f, g_theSimpleRenderer->m_font );
 	
 	#ifdef TRACK_MEMORY
-		g_theSimpleRenderer->DrawText2D(Stringf("Bytes Allocated: %s", GetPrettierSize(MemoryProfilerGetTotalByteCount()).c_str()).c_str(), Vector2(40.f, 645.f), RGBA::WHITE, 0.8f);
-		g_theSimpleRenderer->DrawText2D(Stringf("Highwater: %s", GetPrettierSize(MemoryProfilerGetHighwaterByteCount()).c_str()).c_str(), Vector2(40.f, 620.f), RGBA::WHITE, 0.8f);
+		g_theSimpleRenderer->DrawText2D(Stringf("Bytes Allocated: %s", GetByteSizeAsString(MemoryProfilerGetTotalByteCount()).c_str()).c_str(), Vector2(40.f, 645.f), RGBA::WHITE, 0.8f);
+		g_theSimpleRenderer->DrawText2D(Stringf("Highwater: %s", GetByteSizeAsString(MemoryProfilerGetHighwaterByteCount()).c_str()).c_str(), Vector2(40.f, 620.f), RGBA::WHITE, 0.8f);
 		g_theSimpleRenderer->DrawText2D(Stringf("Total Allocations: %u", MemoryProfilerGetAllocationCount()).c_str(), Vector2(40.f, 595.f), RGBA::WHITE, 0.8f);
 		g_theSimpleRenderer->DrawText2D(Stringf("Frame Allocations: %u", MemoryProfilerGetAllocationsLastFrame()).c_str(), Vector2(40.f, 570.f), RGBA::WHITE, 0.8f);
 		g_theSimpleRenderer->DrawText2D(Stringf("Frame Frees: %u",		MemoryProfilerGetFreesLastFrame()).c_str(), Vector2(40.f, 545.f), RGBA::WHITE, 0.8f);
@@ -318,7 +318,7 @@ void DeveloperConsole::RenderProfiler()
 		m_profilerYPos = 375.f;
 
 		if (g_reportTree != nullptr)
-			g_theSimpleRenderer->DrawText2D(Stringf("Last Frame Time: %s", GetPrettierTime(g_reportTree->totalTime).c_str()).c_str(), Vector2(20.f,	m_profilerYPos + 100.f), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
+			g_theSimpleRenderer->DrawText2D(Stringf("Last Frame Time: %s", GetTimeAsString(g_reportTree->totalTime).c_str()).c_str(), Vector2(20.f,	m_profilerYPos + 100.f), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 		g_theSimpleRenderer->DrawText2D(Stringf("FPS: %f", GetFPS()).c_str(), Vector2(20.f,	m_profilerYPos + 125.f), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 
 		g_theSimpleRenderer->DrawText2D("FRAME TREE VIEW", Vector2(20.f,	m_profilerYPos + 50.f), RGBA::WHITE, 0.9f,	g_theSimpleRenderer->m_font);
@@ -342,11 +342,11 @@ void DeveloperConsole::RenderProfileReportNode(ReportNode_t *node)
 	g_theSimpleRenderer->DrawText2D(Stringf("%s", node->tag).c_str(), Vector2(m_profilerXPos, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 	g_theSimpleRenderer->DrawText2D(Stringf("%i", node->numCalls).c_str(), Vector2(450.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 	g_theSimpleRenderer->DrawText2D(Stringf("%.2f%c", node->percentOfFrameTime * 100.f, '%').c_str(), Vector2(550.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
-	g_theSimpleRenderer->DrawText2D(GetPrettierTime(node->totalTime).c_str(), Vector2(650.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
-	g_theSimpleRenderer->DrawText2D(GetPrettierTime(node->averageTotalTime).c_str(), Vector2(750.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
+	g_theSimpleRenderer->DrawText2D(GetTimeAsString(node->totalTime).c_str(), Vector2(650.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
+	g_theSimpleRenderer->DrawText2D(GetTimeAsString(node->averageTotalTime).c_str(), Vector2(750.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 	g_theSimpleRenderer->DrawText2D(Stringf("%.2f%c", node->percentOfSelfTime * 100.f, '%').c_str(), Vector2(900.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
-	g_theSimpleRenderer->DrawText2D(GetPrettierTime(node->selfTime).c_str(), Vector2(1000.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
-	g_theSimpleRenderer->DrawText2D(GetPrettierTime(node->averageSelfTime).c_str(), Vector2(1100.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
+	g_theSimpleRenderer->DrawText2D(GetTimeAsString(node->selfTime).c_str(), Vector2(1000.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
+	g_theSimpleRenderer->DrawText2D(GetTimeAsString(node->averageSelfTime).c_str(), Vector2(1100.f, m_profilerYPos), RGBA::WHITE, 0.8f, g_theSimpleRenderer->m_font);
 }
 
 void DeveloperConsole::RecursivePrintProfiler(ReportNode_t *node)
