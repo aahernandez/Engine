@@ -138,6 +138,22 @@ void AABB2D::SetAspectRatioPreservingHeight(float xRatio, float yRatio)
 	SetCenterAndRadii(center, newXSize * 0.5f, size.y * 0.5f);
 }
 
+void AABB2D::Scale(float scale)
+{
+	Vector2 size = CalcSize();
+	Vector2 newSize = size * scale;
+	Vector2 center = CalcCenter();
+	SetCenterAndRadii(center, newSize.x / 2.f, newSize.y / 2.f);
+}
+
+void AABB2D::Scale(Vector2 scale)
+{
+	Vector2 size = CalcSize();
+	Vector2 newSize = size * scale;
+	Vector2 center = CalcCenter();
+	SetCenterAndRadii(center, newSize.x / 2.f, newSize.y / 2.f);
+}
+
 bool AABB2D::IsPointInside(const Vector2& point) const
 {
 	return (point.x > mins.x &&

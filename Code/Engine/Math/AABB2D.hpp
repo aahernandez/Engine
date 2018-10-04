@@ -29,7 +29,8 @@ public:
 	void RotateDegrees(float degrees);
 	void SetAspectRatioPreservingWidth(float xRatio, float yRatio);
 	void SetAspectRatioPreservingHeight(float xRatio, float yRatio);
-
+	void Scale(float scale);
+	void Scale(Vector2 scale);
 
 	bool IsPointInside(const Vector2& point) const;
 	const Vector2 CalcSize() const;

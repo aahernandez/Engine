@@ -110,7 +110,7 @@ std::string RGBA::GetAsString()
 {
 	float rF, gF, bF, aF;
 	GetAsFloats(rF, gF, bF, aF);
-	std::string colorAsString = Stringf("[%f,%f,%f]", round(rF), round(gF), round(bF));
+	std::string colorAsString = Stringf("{%f,%f,%f}", round(rF), round(gF), round(bF));
 	return colorAsString;
 }
 

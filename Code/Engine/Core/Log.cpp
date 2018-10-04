@@ -96,7 +96,7 @@ void Log::RenderLog(Vector2 position, bool isRenderingUp /*= false*/, bool isRen
 	{
 		float logWidth = GetMaxWidthOfLog();
 		float logHeight = GetHeightOfLog();
-		float borderSize = 10.f * m_windowScale;
+		float borderSize = 1.f;
 		float borderSizeHalved = borderSize * 0.5f;
 		Vector2 positionScaled = position * m_windowScale;
 		AABB2D logBounds = AABB2D(Vector2(positionScaled.x - borderSize, positionScaled.y - logHeight - borderSize), Vector2(positionScaled.x + logWidth + borderSize, positionScaled.y));

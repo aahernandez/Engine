@@ -108,7 +108,7 @@ void Window::Open()
 	int offsetWidth = (desktopRect.right - m_physicalWidth) / 2;
 	int offsetHeight = (desktopRect.bottom - m_physicalHeight) / 2;
 	int furtherOffsetWidth = 0;
-	int furtherOffsetHeight = 30;
+	int furtherOffsetHeight = 0;
 
 	RECT windowRect;
 

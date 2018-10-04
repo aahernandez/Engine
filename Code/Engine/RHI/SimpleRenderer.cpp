@@ -33,7 +33,7 @@ SimpleRenderer::SimpleRenderer()
 	, m_defaultDepthStencil(nullptr)
 	, m_font(nullptr)
 	, m_meshBuilder(nullptr)
-	, m_windowScale(1.f)
+	, m_windowToScreenRatio(1.f, 1.f)
 	, m_currentSetTexture(nullptr)
 {
 }
@@ -45,7 +45,7 @@ SimpleRenderer::~SimpleRenderer()
 
 void SimpleRenderer::Setup(unsigned int width, unsigned int height, e_RHIOutputMode outputMode, char const *fontName)
 {
-	m_windowScale = 1.f;
+	m_windowToScreenRatio = Vector2::ONE;
 	RHIInstance *rhiInstance = RHIInstance::GetInstance();
 	rhiInstance->CreateOutput(&m_rhiDevice, &m_rhiContext, &m_rhiOutput, width, height, outputMode);
 	m_defaultRasterState = new RasterState(m_rhiDevice);
@@ -637,7 +637,8 @@ void SimpleRenderer::SetOrthoProjection(Vector2 const &bottomLeft, Vector2 const
 		0.f, 1.f);
 	m_orthoProjection = AABB2D(bottomLeft, topRight);
 	SetProjectionMatrix(orthoProjection);
-	m_windowScale = topRight.x / m_rhiOutput->GetWidth();
+	m_windowToScreenRatio.x = topRight.x / m_rhiOutput->GetWidth();
+	m_windowToScreenRatio.y = topRight.y / m_rhiOutput->GetHeight();
 }
 
 void SimpleRenderer::SetPerspectiveProjection(float const fovRadians, float aspectRatio, float const nz, float const fz)
@@ -1031,9 +1032,138 @@ void SimpleRenderer::DrawText2DCenteredOnPosition(char const *string, Vector2 po
 		font = m_font;
 	}
 
-	float stringWidth = font->CalculateTextWidth(string, scale);
-	float stringHeight = font->CalculateTextHeight(string, scale);
+	float stringWidth = font->CalculateTextWidth(string, scale * m_windowToScreenRatio.x);
+	float stringHeight = font->CalculateTextHeight(string, scale * m_windowToScreenRatio.y);
 	Vector2 cursor = position;
+	cursor.x = cursor.x - (stringWidth * 0.5f);
+	cursor.y = cursor.y + (stringHeight * 0.5f);
+
+	char const *characterCode = string;
+	int prevCharacterCode = -1;
+	unsigned int charCount = 0;
+	RGBA newColor = color;
+
+
+	m_meshBuilder->Begin(true, font->m_texture);
+
+	while (*characterCode != NULL)
+	{
+		if (*characterCode == '{')
+		{
+			++characterCode;
+			if (*characterCode == '-')
+			{
+				newColor = color;
+				++characterCode;
+				++characterCode;
+			}
+			else if (*characterCode >= 48 && *characterCode <= 57) //if character code is a number
+			{
+				std::string rStr, gStr, bStr;
+				float r, g, b;
+				while (*characterCode != ',')
+				{
+					rStr += *characterCode;
+					++characterCode;
+				}
+				r = (float)atof(rStr.c_str());
+				++characterCode;
+
+				while (*characterCode != ',')
+				{
+					gStr += *characterCode;
+					++characterCode;
+				}
+				g = (float)atof(gStr.c_str());
+				++characterCode;
+
+				while (*characterCode != '}')
+				{
+					bStr += *characterCode;
+					++characterCode;
+				}
+				b = (float)atof(bStr.c_str());
+
+				newColor.SetAsFloats(r, g, b, 1.f);
+				++characterCode;
+			}
+			else
+			{
+				--characterCode;
+			}
+		}
+
+		t_FontData const *glyph = font->GetGlyph(*characterCode);
+
+		if (glyph == nullptr)
+			glyph = font->GetInvalidGlyph();
+
+		float scaleW = (float)font->m_scale.x;
+		float scaleH = (float)font->m_scale.y;
+
+		Vector2 topLeft = cursor + (Vector2((float)glyph->xOffset * scale * m_windowToScreenRatio.x, (float)-glyph->yOffset * scale * m_windowToScreenRatio.y));
+		Vector2 bottomLeft = topLeft + Vector2(0.f, (float)-glyph->height * scale * m_windowToScreenRatio.y);
+		Vector2 topRight = topLeft + Vector2((float)glyph->width * scale * m_windowToScreenRatio.x, 0.f);
+
+		Vector2 uvTopLeft = Vector2((float)glyph->x / scaleW, (float)glyph->y / scaleH);
+		Vector2 uvTopRight = uvTopLeft + Vector2(0.f, (float)glyph->height / scaleH);
+		Vector2 uvBottomLeft = uvTopLeft + Vector2((float)glyph->width / scaleW, 0.f);
+		SwapValues(uvBottomLeft.x, uvTopRight.x);
+
+		AddQuadToMeshBuilder(bottomLeft, topRight, newColor, uvBottomLeft, uvTopRight, charCount);
+
+		cursor.x += glyph->xAdvance * scale * m_windowToScreenRatio.x;
+		prevCharacterCode = *characterCode;
+		++characterCode;
+
+		int kearning = font->GetKearning(prevCharacterCode, *characterCode);
+		cursor.x += kearning * scale * m_windowToScreenRatio.x;
+
+		charCount += 4;
+	}
+
+	m_meshBuilder->End();
+}
+
+void SimpleRenderer::DrawTextList2DCenteredOnPosition(std::vector<std::string>& stringList, Vector2 position, Vector2 positionDelta, RGBA color /*= RGBA::WHITE*/, float scale /*= 1.f*/, Font *font /*= nullptr*/)
+{
+	std::vector<std::string>::iterator stringIter;
+	for (stringIter = stringList.begin(); stringIter != stringList.end(); ++stringIter)
+	{
+		std::string currentString = *stringIter;
+		DrawText2DCenteredOnPosition(currentString.c_str(), position, color, scale, font);
+		position += positionDelta;
+	}
+}
+
+void SimpleRenderer::DrawText2DCenteredAndScaledToFitWithinBounds(char const *string, AABB2D bounds, RGBA color /*= RGBA::WHITE*/, Font *font /*= nullptr*/)
+{
+	if (font == nullptr)
+	{
+		font = m_font;
+	}
+
+	Vector2 boundsSize = bounds.CalcSize();
+	float scale = GetMin(boundsSize.x * m_windowToScreenRatio.x, boundsSize.y * m_windowToScreenRatio.y);
+	float stringWidth = 0.f;
+	float stringHeight = 0.f;
+
+	do 
+	{
+		stringWidth = font->CalculateTextWidth(string, scale);
+		stringHeight = font->CalculateTextHeight(string, scale);
+
+		if (stringWidth > boundsSize.x)
+		{
+			scale *= (boundsSize.x / stringWidth);
+		}
+		else if (stringHeight > boundsSize.y)
+		{
+			scale *= (boundsSize.y / stringHeight);
+		}
+	} while (stringWidth > boundsSize.x || stringHeight > boundsSize.y);
+
+	Vector2 cursor = bounds.CalcCenter();
 	cursor.x = cursor.x - (stringWidth * 0.5f);
 	cursor.y = cursor.y + (stringHeight * 0.5f);
 
@@ -1109,7 +1239,7 @@ void SimpleRenderer::DrawText2DCenteredOnPosition(char const *string, Vector2 po
 		Vector2 uvBottomLeft = uvTopLeft + Vector2((float)glyph->width / scaleW, 0.f);
 		SwapValues(uvBottomLeft.x, uvTopRight.x);
 
-		AddQuadToMeshBuilder(bottomLeft, topRight, uvBottomLeft, uvTopRight, newColor, charCount);
+		AddQuadToMeshBuilder(bottomLeft, topRight, newColor, uvBottomLeft, uvTopRight, charCount);
 
 		cursor.x += glyph->xAdvance * scale;
 		prevCharacterCode = *characterCode;
@@ -1122,136 +1252,6 @@ void SimpleRenderer::DrawText2DCenteredOnPosition(char const *string, Vector2 po
 	}
 
 	m_meshBuilder->End();
-}
-
-void SimpleRenderer::DrawText2DCenteredAndScaledToFitWithinBounds(AABB2D bounds, RGBA color, Font *font, char const *string)
-{
-	float scale = 1.f;
-	float textWidth = font->CalculateTextWidth(string, scale);
-	float textHeight = font->GetMaxTextHeight(string, scale);
-	float boundsWidth = (bounds.maxs.x - bounds.mins.x);
-	float boundsHeight = (bounds.maxs.y - bounds.mins.y);
-	if (textWidth >= boundsWidth && textWidth >= textHeight)
-	{
-		scale = (boundsWidth / textWidth) - 0.005f;
-	}
-	else if (textHeight > boundsHeight && textHeight > textWidth)
-	{
-		scale = (boundsHeight / textHeight) - 0.005f;
-	}
-	textWidth = font->CalculateTextWidth(string, scale);
-	textHeight = font->GetMaxTextHeight(string, scale);
-
-	Vector2 boundsCenter = Vector2((bounds.maxs.x - (boundsWidth / 2.f)), ( bounds.maxs.y - (boundsHeight / 2.f) ) );
-	Vector2 cursor = Vector2((boundsCenter.x - (textWidth / 2.f)), boundsCenter.y + (textHeight * (7.f/10.f) ));
-	cursor = cursor / scale;
-	cursor.x = FastFloor(cursor.x);
-	cursor.y = FastFloor(cursor.y);
-
-	char const *characterCode = string;
-	int prevCharacterCode = -1;
-
-	std::vector<VertexBuffer*> glyphVBA;
-	std::vector<IndexBuffer*> glyphIBA;
-	SetTexture(0, font->m_texture);
-	RGBA newColor = color;
-
-	while (*characterCode != NULL)
-	{
-		if (*characterCode == '[')
-		{
-			++characterCode;
-			if (*characterCode == '-')
-			{
-				newColor = color;
-				++characterCode;
-				++characterCode;
-			}
-			else
-			{
-				std::string rStr, gStr, bStr;
-				float r, g, b;
-				while (*characterCode != ',')
-				{
-					rStr += *characterCode;
-					++characterCode;
-				}
-				r = (float)atof(rStr.c_str());
-				++characterCode;
-
-				while (*characterCode != ',')
-				{
-					gStr += *characterCode;
-					++characterCode;
-				}
-				g = (float)atof(gStr.c_str());
-				++characterCode;
-
-				while (*characterCode != ']')
-				{
-					bStr += *characterCode;
-					++characterCode;
-				}
-				b = (float)atof(bStr.c_str());
-
-				newColor.SetAsFloats(r, g, b, 1.f);
-				++characterCode;
-
-			}
-		}
-
-		t_FontData const *glyph = font->GetGlyph(*characterCode);
-
-		if (glyph == nullptr)
-		{
-			glyph = font->GetInvalidGlyph();
-		}
-
-		float scaleW = (float)font->m_scale.x;
-		float scaleH = (float)font->m_scale.y;
-
-		Vector2 topLeft = cursor + Vector2((float)glyph->xOffset, (float)-glyph->yOffset);
-		Vector2 topRight = topLeft + Vector2(0.f, (float)-glyph->height);
-		Vector2 bottomLeft = topLeft + Vector2((float)glyph->width, 0.f);
-
-		Vector2 uvTopLeft = Vector2((float)glyph->x / scaleW, (float)glyph->y / scaleH);
-		Vector2 uvBottomLeft = uvTopLeft + Vector2(0.f, (float)glyph->height / scaleH);
-		Vector2 uvTopRight = uvTopLeft + Vector2((float)glyph->width / scaleW, 0.f);
-		float tempX = uvBottomLeft.x;
-		uvBottomLeft.x = uvTopRight.x;
-		uvTopRight.x = tempX;
-
-		VertexBuffer *glyphVB = nullptr;
-		IndexBuffer *glyphIB = nullptr;
-		CreateTexturedQuad2D(bottomLeft * scale, topRight * scale, uvBottomLeft, uvTopRight, newColor, &glyphVB, &glyphIB);
-		glyphVBA.push_back(glyphVB);
-		glyphIBA.push_back(glyphIB);
-
-		cursor.x += glyph->xAdvance;
-		prevCharacterCode = *characterCode;
-		++characterCode;
-
-		int kearning = font->GetKearning(prevCharacterCode, *characterCode);
-		cursor.x += kearning;
-	}
-	DrawVertexBufferArray(PRIMITIVE_TRIANGLES, glyphVBA, glyphIBA);
-
-	std::vector<VertexBuffer*>::iterator glyphVBAIter;
-	std::vector<IndexBuffer*>::iterator glyphIBAIter;;
-
-	for (glyphVBAIter = glyphVBA.begin(); glyphVBAIter != glyphVBA.end(); ++glyphVBAIter)
-	{
-		delete *glyphVBAIter;
-		*glyphVBAIter = nullptr;
-	}
-	glyphVBA.clear();
-
-	for (glyphIBAIter = glyphIBA.begin(); glyphIBAIter != glyphIBA.end(); ++glyphIBAIter)
-	{
-		delete *glyphIBAIter;
-		*glyphIBAIter = nullptr;
-	}
-	glyphIBA.clear();
 }
 
 void SimpleRenderer::GetTextQuad2DCenteredAndScaledToFitWithinBounds(AABB2D bounds, RGBA color, Font *font, char glyphCharacter, VertexBuffer **vertexBuffer, IndexBuffer **indexBuffer)
@@ -1539,14 +1539,14 @@ VertexBuffer* SimpleRenderer::CreateQuad2DVertexBuffer(float x, float y, float z
 void SimpleRenderer::DrawQuad2D(Vector2 bottomLeft, Vector2 topRight, RGBA color)
 {
 	m_meshBuilder->Begin(true, m_whiteTexture);
-	AddQuadToMeshBuilder(bottomLeft, topRight, Vector2::ZERO, Vector2::ONE, color);
+	AddQuadToMeshBuilder(bottomLeft, topRight, color);
 	m_meshBuilder->End();
 }
 
 void SimpleRenderer::DrawQuad2D(Vector2 bottomLeft, Vector2 topRight, Vector2 uvBottomLeft, Vector2 uvTopRight, RGBA color)
 {
 	m_meshBuilder->Begin(true, m_currentSetTexture);
-	AddQuadToMeshBuilder(bottomLeft, topRight, uvBottomLeft, uvTopRight, color);
+	AddQuadToMeshBuilder(bottomLeft, topRight, color, uvBottomLeft, uvTopRight);
 	m_meshBuilder->End();
 }
 
@@ -1603,14 +1603,14 @@ void SimpleRenderer::DrawQuad2DTextured(const AABB2D& bounds, const AABB2D uvBou
 void SimpleRenderer::DrawQuad2DTextured(Vector2 bottomLeft, Vector2 topRight, Texture2D *texture, RGBA color /*= RGBA::WHITE*/)
 {
 	m_meshBuilder->Begin(true, texture);
-	AddQuadToMeshBuilder(bottomLeft, topRight, Vector2(0.f,0.f), Vector2(1.f,1.f), color);
+	AddQuadToMeshBuilder(bottomLeft, topRight, color);
 	m_meshBuilder->End();
 }
 
 void SimpleRenderer::DrawQuad2DTextured(const AABB2D& bounds, Texture2D* texture, RGBA color /*= RGBA::WHITE*/)
 {
 	m_meshBuilder->Begin(true, texture);
-	AddQuadToMeshBuilder(bounds.mins, bounds.maxs, Vector2(0.f, 0.f), Vector2(1.f, 1.f), color);
+	AddQuadToMeshBuilder(bounds.mins, bounds.maxs, color);
 	m_meshBuilder->End();
 }
 
@@ -1780,97 +1780,20 @@ void SimpleRenderer::DrawDisc2D(const Vector2& center, const float radius, const
 
 void SimpleRenderer::DrawDebugQuad2D(const AABB2D& bounds, float edgeThickness, const RGBA& interiorColor, const RGBA& edgeColor)
 {
-	SetTexture(m_whiteTexture);
+	m_meshBuilder->Begin(true, m_whiteTexture);
 
-	AABB2D uvBounds = AABB2D(Vector2(0.f, 0.f), Vector2(1.f, 1.f));
-	AABB2D outerBounds = bounds;
-	outerBounds.AddPadding(edgeThickness, edgeThickness);
-	AABB2D outerBoundsTop = outerBounds;
-	outerBoundsTop.mins.y = outerBoundsTop.maxs.y - edgeThickness;
-	AABB2D outerBoundsBot = outerBounds;
-	outerBoundsBot.maxs.y = outerBoundsBot.mins.y + edgeThickness;
-	AABB2D outerBoundsRight = outerBounds;
-	outerBoundsRight.mins.x = outerBoundsRight.maxs.x - edgeThickness;
-	AABB2D outerBoundsLeft = outerBounds;
-	outerBoundsLeft.maxs.x = outerBoundsLeft.mins.x + edgeThickness;
+	AddQuadToMeshBuilder(bounds, interiorColor);
 
-	std::vector<Vertex> vertices;
-	vertices.push_back(Vertex(Vector3(bounds.mins.x, bounds.mins.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.maxs.y), interiorColor));
-	vertices.push_back(Vertex(Vector3(bounds.maxs.x, bounds.maxs.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.mins.y), interiorColor));
-	vertices.push_back(Vertex(Vector3(bounds.mins.x, bounds.maxs.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.mins.y), interiorColor));
-	vertices.push_back(Vertex(Vector3(bounds.maxs.x, bounds.mins.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.maxs.y), interiorColor));
+	AABB2D leftEdge = AABB2D(Vector2(bounds.mins.x - edgeThickness, bounds.mins.y - edgeThickness), Vector2(bounds.mins.x + edgeThickness, bounds.maxs.y + edgeThickness));
+	AABB2D rightEdge = AABB2D(Vector2(bounds.maxs.x - edgeThickness, bounds.mins.y - edgeThickness), Vector2(bounds.maxs.x + edgeThickness, bounds.maxs.y + edgeThickness));
+	AABB2D topEdge = AABB2D(Vector2(bounds.mins.x - edgeThickness, bounds.maxs.y - edgeThickness), Vector2(bounds.maxs.x + edgeThickness, bounds.maxs.y + edgeThickness));
+	AABB2D bottomEdge = AABB2D(Vector2(bounds.mins.x - edgeThickness, bounds.mins.y - edgeThickness), Vector2(bounds.maxs.x + edgeThickness, bounds.mins.y + edgeThickness));
+	AddQuadToMeshBuilder(leftEdge, edgeColor, Vector2::ZERO, Vector2::ONE, 4);
+	AddQuadToMeshBuilder(rightEdge, edgeColor, Vector2::ZERO, Vector2::ONE, 8);
+	AddQuadToMeshBuilder(topEdge, edgeColor, Vector2::ZERO, Vector2::ONE, 12);
+	AddQuadToMeshBuilder(bottomEdge, edgeColor, Vector2::ZERO, Vector2::ONE, 16);
 
-	vertices.push_back(Vertex(Vector3(outerBoundsTop.mins.x, outerBoundsTop.mins.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.maxs.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsTop.maxs.x, outerBoundsTop.maxs.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsTop.mins.x, outerBoundsTop.maxs.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsTop.maxs.x, outerBoundsTop.mins.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.maxs.y), edgeColor));
-
-	vertices.push_back(Vertex(Vector3(outerBoundsBot.mins.x, outerBoundsBot.mins.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.maxs.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsBot.maxs.x, outerBoundsBot.maxs.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsBot.mins.x, outerBoundsBot.maxs.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsBot.maxs.x, outerBoundsBot.mins.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.maxs.y), edgeColor));
-
-	vertices.push_back(Vertex(Vector3(outerBoundsRight.mins.x, outerBoundsRight.mins.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.maxs.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsRight.maxs.x, outerBoundsRight.maxs.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsRight.mins.x, outerBoundsRight.maxs.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsRight.maxs.x, outerBoundsRight.mins.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.maxs.y), edgeColor));
-
-	vertices.push_back(Vertex(Vector3(outerBoundsLeft.mins.x, outerBoundsLeft.mins.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.maxs.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsLeft.maxs.x, outerBoundsLeft.maxs.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsLeft.mins.x, outerBoundsLeft.maxs.y, 1.f), Vector2(uvBounds.mins.x, uvBounds.mins.y), edgeColor));
-	vertices.push_back(Vertex(Vector3(outerBoundsLeft.maxs.x, outerBoundsLeft.mins.y, 1.f), Vector2(uvBounds.maxs.x, uvBounds.maxs.y), edgeColor));
-
-	std::vector<DWORD> indices;
-	indices.push_back(0);
-	indices.push_back(1);
-	indices.push_back(2);
-	indices.push_back(0);
-	indices.push_back(3);
-	indices.push_back(1);
-
-	indices.push_back(4);
-	indices.push_back(5);
-	indices.push_back(6);
-	indices.push_back(4);
-	indices.push_back(7);
-	indices.push_back(5);
-
-	indices.push_back(8);
-	indices.push_back(9);
-	indices.push_back(10);
-	indices.push_back(8);
-	indices.push_back(11);
-	indices.push_back(9);
-
-	indices.push_back(12);
-	indices.push_back(13);
-	indices.push_back(14);
-	indices.push_back(12);
-	indices.push_back(15);
-	indices.push_back(13);
-
-	indices.push_back(16);
-	indices.push_back(17);
-	indices.push_back(18);
-	indices.push_back(16);
-	indices.push_back(19);
-	indices.push_back(17);
-
-	std::vector<VertexBuffer*> vba;
-	std::vector<IndexBuffer*> iba;
-	VertexBuffer *vertexBuffer = m_rhiDevice->CreateVertexBuffer(vertices);
-	IndexBuffer *indexBuffer = m_rhiDevice->CreateIndexBuffer(indices);
-	vba.push_back(vertexBuffer);
-	iba.push_back(indexBuffer);
-	DrawVertexBufferArray(PRIMITIVE_TRIANGLES, vba, iba);
-
-	delete vba[0];
-	vba[0] = nullptr;
-	vba.clear();
-
-	delete iba[0];
-	iba[0] = nullptr;
-	iba.clear();
+	m_meshBuilder->End();
 }
 
 void SimpleRenderer::DrawDebugCircle2D(const Vector2& position, float radius, float edgeThickness, int numSides, const RGBA& interiorColor, const RGBA& edgeColor)
@@ -1970,8 +1893,26 @@ void SimpleRenderer::DrawCircleHollow2D(const Vector2& position, float radiusToE
 	DrawLineRotated2D(lastVertex, currentVertex, edgeThickness, edgeColor, edgeColor);
 }
 
-void SimpleRenderer::AddQuadToMeshBuilder(Vector2 bottomLeft, Vector2 topRight, Vector2 uvBottomLeft /*= Vector2::ZERO*/, Vector2 uvTopRight /*= Vector2::ZERO*/, RGBA color /*= RGBA::WHITE*/, int startingIndex /*= 0*/)
+void SimpleRenderer::AddQuadToMeshBuilder(Vector2 bottomLeft, Vector2 topRight, RGBA color /*= RGBA::WHITE*/, Vector2 uvBottomLeft /*= Vector2::ZERO*/, Vector2 uvTopRight /*= Vector2::ONE*/, int startingIndex /*= 0*/)
 {
+	m_meshBuilder->AddVertex(Vertex(Vector3(bottomLeft.x, bottomLeft.y, 1.f), Vector2(uvBottomLeft.x, uvTopRight.y), color));
+	m_meshBuilder->AddVertex(Vertex(Vector3(topRight.x, topRight.y, 1.f), Vector2(uvTopRight.x, uvBottomLeft.y), color));
+	m_meshBuilder->AddVertex(Vertex(Vector3(bottomLeft.x, topRight.y, 1.f), Vector2(uvBottomLeft.x, uvBottomLeft.y), color));
+	m_meshBuilder->AddVertex(Vertex(Vector3(topRight.x, bottomLeft.y, 1.f), Vector2(uvTopRight.x, uvTopRight.y), color));
+
+	m_meshBuilder->AddIndex(startingIndex + 0);
+	m_meshBuilder->AddIndex(startingIndex + 1);
+	m_meshBuilder->AddIndex(startingIndex + 2);
+	m_meshBuilder->AddIndex(startingIndex + 0);
+	m_meshBuilder->AddIndex(startingIndex + 3);
+	m_meshBuilder->AddIndex(startingIndex + 1);
+}
+
+void SimpleRenderer::AddQuadToMeshBuilder(AABB2D quadBounds, RGBA color /*= RGBA::WHITE*/, Vector2 uvBottomLeft /*= Vector2::ZERO*/, Vector2 uvTopRight /*= Vector2::ONE*/, int startingIndex /*= 0*/)
+{
+	Vector2 bottomLeft = quadBounds.mins;
+	Vector2 topRight = quadBounds.maxs;
+
 	m_meshBuilder->AddVertex(Vertex(Vector3(bottomLeft.x, bottomLeft.y, 1.f), Vector2(uvBottomLeft.x, uvTopRight.y), color));
 	m_meshBuilder->AddVertex(Vertex(Vector3(topRight.x, topRight.y, 1.f), Vector2(uvTopRight.x, uvBottomLeft.y), color));
 	m_meshBuilder->AddVertex(Vertex(Vector3(bottomLeft.x, topRight.y, 1.f), Vector2(uvBottomLeft.x, uvBottomLeft.y), color));

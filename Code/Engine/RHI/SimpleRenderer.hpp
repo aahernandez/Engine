@@ -118,7 +118,7 @@ public:
 
 	MeshBuilder *m_meshBuilder;
 
-	float m_windowScale;
+	Vector2 m_windowToScreenRatio;
 
 	SimpleRenderer();
 	~SimpleRenderer();
@@ -188,7 +188,8 @@ public:
 	//2D
 	void DrawText2D(char const *string, Vector2 position, RGBA color = RGBA::WHITE, float scale = 1.f, Font *font = nullptr);
 	void DrawText2DCenteredOnPosition(char const *string, Vector2 position, RGBA color = RGBA::WHITE, float scale = 1.f, Font *font = nullptr);
-	void DrawText2DCenteredAndScaledToFitWithinBounds(AABB2D bounds, RGBA color, Font *font, char const *string);
+	void DrawTextList2DCenteredOnPosition(std::vector<std::string>& stringList, Vector2 position, Vector2 positionDelta, RGBA color = RGBA::WHITE, float scale = 1.f, Font *font = nullptr);
+	void DrawText2DCenteredAndScaledToFitWithinBounds(char const *string, AABB2D bounds, RGBA color = RGBA::WHITE, Font *font = nullptr);
 	void GetTextQuad2DCenteredAndScaledToFitWithinBounds(AABB2D bounds, RGBA color, Font *font, char glyph, VertexBuffer **vertexBuffer, IndexBuffer **indexBuffer);
 	void DrawText2DScaledWithAspectRatio(Vector2 postion, float scaleX, float scaleY, RGBA color, Font *font, char const *string);
 	void DrawQuad2D(Vector2 bottomLeft, Vector2 topRight, RGBA color);
@@ -204,7 +205,8 @@ public:
 	void DrawDebugQuad2D(const AABB2D& bounds, float edgeThickness, const RGBA& interiorColor, const RGBA& edgeColor);
 	void DrawDebugCircle2D(const Vector2& position, float radius, float edgeThickness, int numSides, const RGBA& interiorColor, const RGBA& edgeColor);
 	void DrawCircleHollow2D(const Vector2& position, float radius, float edgeThickness, int numSides, const RGBA& edgeColor);
-	void AddQuadToMeshBuilder(Vector2 bottomLeft, Vector2 topRight, Vector2 uvBottomLeft = Vector2::ZERO, Vector2 uvTopRight = Vector2::ZERO, RGBA color = RGBA::WHITE, int startingIndex = 0);
+	void AddQuadToMeshBuilder(Vector2 bottomLeft, Vector2 topRight, RGBA color = RGBA::WHITE, Vector2 uvBottomLeft = Vector2::ZERO, Vector2 uvTopRight = Vector2::ONE, int startingIndex = 0);
+	void AddQuadToMeshBuilder(AABB2D quadBounds, RGBA color = RGBA::WHITE, Vector2 uvBottomLeft = Vector2::ZERO, Vector2 uvTopRight = Vector2::ONE, int startingIndex = 0);
 	
 	void DrawUIButton(const UIButton& uiButton);
 	
